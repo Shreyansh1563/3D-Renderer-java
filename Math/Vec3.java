@@ -35,4 +35,19 @@ public class Vec3 {
             x * other.y - y * other.x
         );
     }
+
+    public Vec3 multiply(float scalar) {
+        return new Vec3(
+            this.x * scalar,
+            this.y * scalar,
+            this.z * scalar
+        );
+    }
+
+    public Vec3 add(Vec3 other){
+        return new Vec3(this.x + other.x,
+            this.y + other.y,
+            this.z + other.z
+        );
+    }
 }

@@ -21,8 +21,9 @@ public class Renderer {
     private final float[] depthBuffer;
     private final BufferedImage image;
 
-    private Vec3 lightDirection = new Vec3(1, 1, 0).normalize();
     private boolean backfaceCullingEnabled = true;
+    private Shader shader = new Shader();
+    private ShadingMode shadingMode = ShadingMode.SMOOTH;
 
 
     public Renderer(int width, int height) {
@@ -53,18 +54,20 @@ public class Renderer {
 
         List<Vec3> viewSpaceVertices = new ArrayList<>();
         List<Vec3> projectedVertices = new ArrayList<>();
+        List<Vec3> viewSpaceNoramls = new ArrayList<>();
 
         transformAndProjectVertices(
-                object,
-                model,
-                view,
-                projection,
-                viewSpaceVertices,
-                projectedVertices
+            object,
+            model,
+            view,
+            projection,
+            viewSpaceVertices,
+            projectedVertices,
+            viewSpaceNoramls
         );
 
         for (Triangle triangle : object.mesh.triangles) {
-            processTriangle(triangle, viewSpaceVertices, projectedVertices);
+            processTriangle(triangle, viewSpaceVertices, projectedVertices, viewSpaceNoramls, object);
         }
     }
 
@@ -95,22 +98,33 @@ public class Renderer {
             Mat4 view,
             Mat4 projection,
             List<Vec3> viewSpace,
-            List<Vec3> projected
-) {
+            List<Vec3> projected,
+            List<Vec3> viewSpaceNormals
+    ) {
 
-        for (Vec3 v : object.mesh.vertices) {
+        Mat4 modelView = view.multiply(model);
+        // Mat4 mvp = projection.multiply(modelView);
+
+        for (int i = 0; i < object.mesh.vertices.size(); i++) {
+            Vec3 v = object.mesh.vertices.get(i);
+            Vec3 n = object.mesh.normals.get(i);
 
             Vec4 vertex = new Vec4(v.x, v.y, v.z, 1);
 
-            Vec4 world = model.multiply(vertex);
-            Vec4 viewV = view.multiply(world);
+            // Vec4 world = model.multiply(vertex);
+            Vec4 viewV = modelView.multiply(vertex);
             Vec4 clip = projection.multiply(viewV);
 
             viewSpace.add(new Vec3(viewV.x, viewV.y, viewV.z));
 
+            Vec4 normal4 = new Vec4(n.x, n.y, n.z, 0);
+            Vec4 viewN4  = modelView.multiply(normal4);
+
+            viewSpaceNormals.add(
+                new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize()
+            );
+
             if (clip.w <= 0) {
-            // // if (viewV.z > -camera.near) {
-            // if (viewV.z >= 0) {
                 projected.add(null);
                 continue;
             }
@@ -131,7 +145,9 @@ public class Renderer {
     private void processTriangle(
             Triangle triangle,
             List<Vec3> viewSpace,
-            List<Vec3> projected
+            List<Vec3> projected,
+            List<Vec3> viewSpaceNoramls,
+            GameObject object
     ) {
 
         Vec3 p0 = projected.get(triangle.v0);
@@ -145,14 +161,26 @@ public class Renderer {
         Vec3 v1 = viewSpace.get(triangle.v1);
         Vec3 v2 = viewSpace.get(triangle.v2);
 
-        Vec3 normal = computeNormal(v0, v1, v2);
+        Vec3 faceNormal = computeNormal(v0, v1, v2);
+        Vec3 n0, n1, n2;
+        if (shadingMode == ShadingMode.FLAT) {
+            // Same normal for whole triangle
+            n0 = faceNormal;
+            n1 = faceNormal;
+            n2 = faceNormal;
 
-        if (isBackface(normal, v0))
-            return;
+        } else {
+            // Smooth shading
+            n0 = viewSpaceNoramls.get(triangle.v0);
+            n1 = viewSpaceNoramls.get(triangle.v1);
+            n2 = viewSpaceNoramls.get(triangle.v2);
+        }
 
-        int shadedColor = computeLighting(normal);
-
-        rasterizeTriangle(p0, p1, p2, shadedColor);
+        rasterizeTriangle(
+            p0, p1, p2,
+            v0, v1, v2,
+            n0, n1, n2
+        );
     }
 
 
@@ -162,46 +190,26 @@ public class Renderer {
         return edge1.cross(edge2).normalize();
     }
 
-
-    private boolean isBackface(Vec3 normal, Vec3 viewVertex) {
-        if (!backfaceCullingEnabled) return false;
-        return normal.dot(viewVertex) >= 0;
-    }
-
-
-    private int computeLighting(Vec3 normal) {
-
-        float lambert = Math.max(0, normal.dot(lightDirection));
-        float ambient = 0.2f;
-        float brightness = ambient + (1 - ambient) * lambert;
-
-        int baseR = 200;
-        int baseG = 200;
-        int baseB = 200;
-
-        int r = (int) (baseR * brightness);
-        int g = (int) (baseG * brightness);
-        int b = (int) (baseB * brightness);
-
-        return (r << 16) | (g << 8) | b;
-    }
-
-    
-    private void rasterizeTriangle(Vec3 p0, Vec3 p1, Vec3 p2, int color) {
+    private void rasterizeTriangle(
+        Vec3 p0, Vec3 p1, Vec3 p2,
+        Vec3 v0View, Vec3 v1View, Vec3 v2View,
+        Vec3 n0, Vec3 n1, Vec3 n2
+    ){
         drawTriangle(
-                p0.x, p0.y, p0.z,
-                p1.x, p1.y, p1.z,
-                p2.x, p2.y, p2.z,
-                color
+            p0.x, p0.y, p0.z,
+            p1.x, p1.y, p1.z,
+            p2.x, p2.y, p2.z, 
+            v0View, v1View, v2View, 
+            n0, n1, n2
         );
     }
 
-
     private void drawTriangle(
-            float x0, float y0, float z0,
-            float x1, float y1, float z1,
-            float x2, float y2, float z2,
-            int color
+        float x0, float y0, float z0,
+        float x1, float y1, float z1,
+        float x2, float y2, float z2,
+        Vec3 v0View, Vec3 v1View, Vec3 v2View,
+        Vec3 n0, Vec3 n1, Vec3 n2
     ) {
 
         float minx = Math.max(0, Math.min(x0, Math.min(x1, x2)));
@@ -237,7 +245,28 @@ public class Renderer {
                     int index = y * width + x;
 
                     if (depth < depthBuffer[index]) {
+
                         depthBuffer[index] = depth;
+
+                        // ===== INTERPOLATION =====
+
+                        Vec3 viewPos =
+                            v0View.multiply(alpha)
+                            .add(v1View.multiply(beta))
+                            .add(v2View.multiply(gamma));
+
+                        Vec3 normal =
+                            n0.multiply(alpha)
+                            .add(n1.multiply(beta))
+                            .add(n2.multiply(gamma))
+                            .normalize();
+
+                        FragmentData frag = new FragmentData();
+                        frag.viewPosition = viewPos;
+                        frag.normal = normal;
+
+                        int color = shader.shadeFragment(frag);
+
                         colorBuffer[index] = color;
                     }
                 }
@@ -245,8 +274,11 @@ public class Renderer {
         }
     }
 
-
     private float edgeFunction(float x0, float y0, float x1, float y1, float x, float y) {
         return (x - x0) * (y1 - y0) - (y - y0) * (x1 - x0);
+    }
+
+    public void setShadingMode(ShadingMode mode){
+        this.shadingMode = mode;
     }
 }

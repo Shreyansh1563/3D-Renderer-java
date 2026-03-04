@@ -1,6 +1,7 @@
 package scene;
 
 import Math.Vec3;
+import graphics.Shader;
 
 public class GameObject {
     public Mesh mesh;
