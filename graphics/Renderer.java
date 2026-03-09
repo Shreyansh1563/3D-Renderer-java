@@ -52,22 +52,28 @@ public class Renderer {
         Mat4 view = camera.getViewMatrix();
         Mat4 projection = camera.getProjectionMatrix();
 
-        List<Vec3> viewSpaceVertices = new ArrayList<>();
         List<Vec3> projectedVertices = new ArrayList<>();
         List<Vec3> viewSpaceNoramls = new ArrayList<>();
+        List<Float> invWs = new ArrayList<>();
+        List<Vec3> viewOverW = new ArrayList<>();
+        List<Vec3> normalOverW = new ArrayList<>();
+        List<Vec3> viewVertices = new ArrayList<>();
 
         transformAndProjectVertices(
             object,
             model,
             view,
             projection,
-            viewSpaceVertices,
+            viewVertices,
+            viewOverW,
             projectedVertices,
-            viewSpaceNoramls
+            viewSpaceNoramls,
+            normalOverW,
+            invWs
         );
 
         for (Triangle triangle : object.mesh.triangles) {
-            processTriangle(triangle, viewSpaceVertices, projectedVertices, viewSpaceNoramls, object);
+            processTriangle(triangle, viewOverW, viewVertices, projectedVertices, normalOverW, invWs, object);
         }
     }
 
@@ -97,11 +103,13 @@ public class Renderer {
             Mat4 model,
             Mat4 view,
             Mat4 projection,
-            List<Vec3> viewSpace,
+            List<Vec3> viewVertices,
+            List<Vec3> viewOverW,
             List<Vec3> projected,
-            List<Vec3> viewSpaceNormals
+            List<Vec3> viewSpaceNormals,
+            List<Vec3> normalOverW,
+            List<Float> invWs
     ) {
-
         Mat4 modelView = view.multiply(model);
         // Mat4 mvp = projection.multiply(modelView);
 
@@ -115,7 +123,9 @@ public class Renderer {
             Vec4 viewV = modelView.multiply(vertex);
             Vec4 clip = projection.multiply(viewV);
 
-            viewSpace.add(new Vec3(viewV.x, viewV.y, viewV.z));
+            // viewSpace.add(new Vec3(viewV.x, viewV.y, viewV.z));
+            // viewOverW.add(new Vec3(viewV.x, viewV.y, viewV.z))
+            viewVertices.add(new Vec3(viewV.x, viewV.y, viewV.z));
 
             Vec4 normal4 = new Vec4(n.x, n.y, n.z, 0);
             Vec4 viewN4  = modelView.multiply(normal4);
@@ -124,11 +134,24 @@ public class Renderer {
                 new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize()
             );
 
+            float invW = 1.0f / clip.w;
+            // normalOverW.add(new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize().multiply(invW));
+            invWs.add(invW);
+
             if (clip.w <= 0) {
                 projected.add(null);
                 continue;
             }
             
+            
+
+            viewOverW.add(new Vec3(viewV.x, viewV.y, viewV.z).multiply(invW));
+
+            normalOverW.add(
+                new Vec3(viewN4.x, viewN4.y, viewN4.z)
+                .normalize()
+                .multiply(invW)
+            );
 
             clip.x /= clip.w;
             clip.y /= clip.w;
@@ -144,9 +167,11 @@ public class Renderer {
 
     private void processTriangle(
             Triangle triangle,
-            List<Vec3> viewSpace,
+            List<Vec3> viewOverW,
+            List<Vec3> viewVertices,
             List<Vec3> projected,
-            List<Vec3> viewSpaceNoramls,
+            List<Vec3> normalOverW,
+            List<Float> invWs,
             GameObject object
     ) {
 
@@ -157,11 +182,14 @@ public class Renderer {
         if (p0 == null || p1 == null || p2 == null)
             return;
 
-        Vec3 v0 = viewSpace.get(triangle.v0);
-        Vec3 v1 = viewSpace.get(triangle.v1);
-        Vec3 v2 = viewSpace.get(triangle.v2);
+        Vec3 v0OverW= viewOverW.get(triangle.v0);
+        Vec3 v1OverW = viewOverW.get(triangle.v1);
+        Vec3 v2OverW = viewOverW.get(triangle.v2);
+        float invW0 = invWs.get(triangle.v0);
+        float invW1 = invWs.get(triangle.v1);
+        float invW2 = invWs.get(triangle.v2);
 
-        Vec3 faceNormal = computeNormal(v0, v1, v2);
+        Vec3 faceNormal = computeNormal(viewVertices.get(triangle.v0), viewVertices.get(triangle.v1), viewVertices.get(triangle.v2));
         Vec3 n0, n1, n2;
         if (shadingMode == ShadingMode.FLAT) {
             // Same normal for whole triangle
@@ -171,15 +199,16 @@ public class Renderer {
 
         } else {
             // Smooth shading
-            n0 = viewSpaceNoramls.get(triangle.v0);
-            n1 = viewSpaceNoramls.get(triangle.v1);
-            n2 = viewSpaceNoramls.get(triangle.v2);
+            n0 = normalOverW.get(triangle.v0);
+            n1 = normalOverW.get(triangle.v1);
+            n2 = normalOverW.get(triangle.v2);
         }
 
         rasterizeTriangle(
             p0, p1, p2,
-            v0, v1, v2,
-            n0, n1, n2
+            v0OverW, v1OverW, v2OverW,
+            n0, n1, n2,
+            invW0, invW1, invW2
         );
     }
 
@@ -190,24 +219,26 @@ public class Renderer {
         return edge1.cross(edge2).normalize();
     }
 
+
     private void rasterizeTriangle(
         Vec3 p0, Vec3 p1, Vec3 p2,
-        Vec3 v0View, Vec3 v1View, Vec3 v2View,
-        Vec3 n0, Vec3 n1, Vec3 n2
+        Vec3 v0OverW, Vec3 v1OverW, Vec3 v2OverW,
+        Vec3 n0OverW, Vec3 n1OverW, Vec3 n2OverW,
+        float invW0, float invW1, float invW2
     ){
         drawTriangle(
-            p0.x, p0.y, p0.z,
-            p1.x, p1.y, p1.z,
-            p2.x, p2.y, p2.z, 
-            v0View, v1View, v2View, 
-            n0, n1, n2
+            p0.x, p0.y, p0.z, invW0,
+            p1.x, p1.y, p1.z, invW1,
+            p2.x, p2.y, p2.z, invW2,
+            v0OverW, v1OverW, v2OverW,
+            n0OverW, n1OverW, n2OverW
         );
     }
 
     private void drawTriangle(
-        float x0, float y0, float z0,
-        float x1, float y1, float z1,
-        float x2, float y2, float z2,
+        float x0, float y0, float z0, float invW0,
+        float x1, float y1, float z1, float invW1,
+        float x2, float y2, float z2, float invW2,
         Vec3 v0View, Vec3 v1View, Vec3 v2View,
         Vec3 n0, Vec3 n1, Vec3 n2
     ) {
@@ -240,6 +271,7 @@ public class Renderer {
                     float beta  = w1 / area;
                     float gamma = w2 / area;
 
+                    // float depth = alpha * z0 / w0 + beta * z1/w1 + gamma * z2/w2;
                     float depth = alpha * z0 + beta * z1 + gamma * z2;
 
                     int index = y * width + x;
@@ -250,16 +282,32 @@ public class Renderer {
 
                         // ===== INTERPOLATION =====
 
-                        Vec3 viewPos =
-                            v0View.multiply(alpha)
-                            .add(v1View.multiply(beta))
-                            .add(v2View.multiply(gamma));
+                        // interpolate 1/w
+                        float invW =
+                                alpha * invW0 +
+                                beta  * invW1 +
+                                gamma * invW2;
+
+                        // interpolate attributes / w
+                        Vec3 viewOverW =
+                                v0View.multiply(alpha)
+                                .add(v1View.multiply(beta))
+                                .add(v2View.multiply(gamma));
+
+                        Vec3 normalOverW =
+                                n0.multiply(alpha)
+                                .add(n1.multiply(beta))
+                                .add(n2.multiply(gamma));
+
+                        // reconstruct correct values
+                        float w = 1.0f / invW;
+
+                        Vec3 viewPos = viewOverW.multiply(w);
 
                         Vec3 normal =
-                            n0.multiply(alpha)
-                            .add(n1.multiply(beta))
-                            .add(n2.multiply(gamma))
-                            .normalize();
+                                normalOverW
+                                .multiply(w)
+                                .normalize();
 
                         FragmentData frag = new FragmentData();
                         frag.viewPosition = viewPos;

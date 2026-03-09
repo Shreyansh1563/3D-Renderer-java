@@ -3,6 +3,7 @@ import engine.Display;
 import engine.Engine;
 import graphics.Camera;
 import graphics.Renderer;
+import graphics.ShadingMode;
 import scene.GameObject;
 import scene.Mesh;
 import scene.Scene;
@@ -43,7 +44,7 @@ public class Main {
 
         Renderer renderer = new Renderer(500, 500);
         // renderer.setBackfaceCulling(false);
-        // renderer.setShadingMode(ShadingMode.FLAT);
+        renderer.setShadingMode(ShadingMode.FLAT);
         
 
         Display display = Display.createDisplay(500, 500, renderer);
