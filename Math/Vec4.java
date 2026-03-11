@@ -9,4 +9,16 @@ public class Vec4 {
         this.z = z;
         this.w = w;
     }
+
+    public Vec4 subtract(Vec4 other){
+        return new Vec4(x-other.x, y-other.y, z-other.z, w-other.w);
+    }
+
+    public Vec4 multiply(float no){
+        return new Vec4(no * x, no * y, no * z, no * w);
+    }
+
+    public Vec4 add(Vec4 other){
+        return new Vec4(x + other.x, y + other.y, z + other.z, w + other.w);
+    }
 }

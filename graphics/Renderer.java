@@ -11,6 +11,7 @@ import Math.Vec4;
 import scene.GameObject;
 import scene.Scene;
 import scene.Triangle;
+import scene.Vertex;
 
 public class Renderer {
 
@@ -35,6 +36,25 @@ public class Renderer {
         this.image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
     }
 
+
+    public BufferedImage getImage() {
+        return image;
+    }
+
+    public void updateImage() {
+        image.setRGB(0, 0, width, height, colorBuffer, 0, width);
+    }
+
+
+    public void setBackfaceCulling(boolean enabled) {
+        this.backfaceCullingEnabled = enabled;
+    }
+
+
+    public int[] getColorBuffer(){
+        return colorBuffer;
+    }
+
     public void clear() {
         Arrays.fill(colorBuffer, 0x000000);
         Arrays.fill(depthBuffer, Float.POSITIVE_INFINITY);
@@ -52,49 +72,13 @@ public class Renderer {
         Mat4 view = camera.getViewMatrix();
         Mat4 projection = camera.getProjectionMatrix();
 
-        List<Vec3> projectedVertices = new ArrayList<>();
-        List<Vec3> viewSpaceNoramls = new ArrayList<>();
-        List<Float> invWs = new ArrayList<>();
-        List<Vec3> viewOverW = new ArrayList<>();
-        List<Vec3> normalOverW = new ArrayList<>();
-        List<Vec3> viewVertices = new ArrayList<>();
+        List<Vertex> vertices = new ArrayList<>();
 
-        transformAndProjectVertices(
-            object,
-            model,
-            view,
-            projection,
-            viewVertices,
-            viewOverW,
-            projectedVertices,
-            viewSpaceNoramls,
-            normalOverW,
-            invWs
-        );
+        transformAndProjectVertices(object, model, view, projection, vertices);
 
         for (Triangle triangle : object.mesh.triangles) {
-            processTriangle(triangle, viewOverW, viewVertices, projectedVertices, normalOverW, invWs, object);
+            processTriangle(triangle, vertices, object);
         }
-    }
-
-
-    public BufferedImage getImage() {
-        return image;
-    }
-
-
-    public void updateImage() {
-        image.setRGB(0, 0, width, height, colorBuffer, 0, width);
-    }
-
-
-    public void setBackfaceCulling(boolean enabled) {
-        this.backfaceCullingEnabled = enabled;
-    }
-
-
-    public int[] getColorBuffer(){
-        return colorBuffer;
     }
 
 
@@ -103,55 +87,36 @@ public class Renderer {
             Mat4 model,
             Mat4 view,
             Mat4 projection,
-            List<Vec3> viewVertices,
-            List<Vec3> viewOverW,
-            List<Vec3> projected,
-            List<Vec3> viewSpaceNormals,
-            List<Vec3> normalOverW,
-            List<Float> invWs
+            List<Vertex> vertices
     ) {
         Mat4 modelView = view.multiply(model);
-        // Mat4 mvp = projection.multiply(modelView);
 
         for (int i = 0; i < object.mesh.vertices.size(); i++) {
+            Vertex vert = new Vertex();
+
             Vec3 v = object.mesh.vertices.get(i);
             Vec3 n = object.mesh.normals.get(i);
 
             Vec4 vertex = new Vec4(v.x, v.y, v.z, 1);
 
-            // Vec4 world = model.multiply(vertex);
             Vec4 viewV = modelView.multiply(vertex);
             Vec4 clip = projection.multiply(viewV);
-
-            // viewSpace.add(new Vec3(viewV.x, viewV.y, viewV.z));
-            // viewOverW.add(new Vec3(viewV.x, viewV.y, viewV.z))
-            viewVertices.add(new Vec3(viewV.x, viewV.y, viewV.z));
+            
+            vert.viewPos = new Vec3(viewV.x, viewV.y, viewV.z); 
 
             Vec4 normal4 = new Vec4(n.x, n.y, n.z, 0);
             Vec4 viewN4  = modelView.multiply(normal4);
 
-            viewSpaceNormals.add(
-                new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize()
-            );
-
-            float invW = 1.0f / clip.w;
-            // normalOverW.add(new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize().multiply(invW));
-            invWs.add(invW);
+            vert.invW = 1.0f / clip.w;
 
             if (clip.w <= 0) {
-                projected.add(null);
+                vertices.add(null);
                 continue;
             }
             
-            
+            vert.viewOverW =new Vec3(viewV.x, viewV.y, viewV.z).multiply(vert.invW);
 
-            viewOverW.add(new Vec3(viewV.x, viewV.y, viewV.z).multiply(invW));
-
-            normalOverW.add(
-                new Vec3(viewN4.x, viewN4.y, viewN4.z)
-                .normalize()
-                .multiply(invW)
-            );
+            vert.normalOverW = new Vec3(viewN4.x, viewN4.y, viewN4.z).normalize().multiply(vert.invW);
 
             clip.x /= clip.w;
             clip.y /= clip.w;
@@ -160,36 +125,29 @@ public class Renderer {
             int screenX = (int) ((clip.x + 1f) * 0.5f * width);
             int screenY = (int) ((1f - clip.y) * 0.5f * height);
 
-            projected.add(new Vec3(screenX, screenY, clip.z));
+            vert.screenPos = new Vec3(screenX, screenY, clip.z);
+
+            vertices.add(vert);
         }
     }
 
 
     private void processTriangle(
             Triangle triangle,
-            List<Vec3> viewOverW,
-            List<Vec3> viewVertices,
-            List<Vec3> projected,
-            List<Vec3> normalOverW,
-            List<Float> invWs,
+            List<Vertex> vertices,
             GameObject object
     ) {
 
-        Vec3 p0 = projected.get(triangle.v0);
-        Vec3 p1 = projected.get(triangle.v1);
-        Vec3 p2 = projected.get(triangle.v2);
+        Vertex v0 = vertices.get(triangle.v0);
+        Vertex v1 = vertices.get(triangle.v1);
+        Vertex v2 = vertices.get(triangle.v2);
 
-        if (p0 == null || p1 == null || p2 == null)
+        if(v0 == null || v1 == null || v2 == null){
             return;
+        }
 
-        Vec3 v0OverW= viewOverW.get(triangle.v0);
-        Vec3 v1OverW = viewOverW.get(triangle.v1);
-        Vec3 v2OverW = viewOverW.get(triangle.v2);
-        float invW0 = invWs.get(triangle.v0);
-        float invW1 = invWs.get(triangle.v1);
-        float invW2 = invWs.get(triangle.v2);
 
-        Vec3 faceNormal = computeNormal(viewVertices.get(triangle.v0), viewVertices.get(triangle.v1), viewVertices.get(triangle.v2));
+        Vec3 faceNormal = computeNormal(v0.viewPos, v1.viewPos, v2.viewPos);
         Vec3 n0, n1, n2;
         if (shadingMode == ShadingMode.FLAT) {
             // Same normal for whole triangle
@@ -199,17 +157,12 @@ public class Renderer {
 
         } else {
             // Smooth shading
-            n0 = normalOverW.get(triangle.v0);
-            n1 = normalOverW.get(triangle.v1);
-            n2 = normalOverW.get(triangle.v2);
+            n0 = v0.normalOverW;
+            n1 = v1.normalOverW;
+            n2 = v2.normalOverW;
         }
 
-        rasterizeTriangle(
-            p0, p1, p2,
-            v0OverW, v1OverW, v2OverW,
-            n0, n1, n2,
-            invW0, invW1, invW2
-        );
+        drawTriangle(v0, v1, v2, n0, n1, n2);
     }
 
 
@@ -220,35 +173,17 @@ public class Renderer {
     }
 
 
-    private void rasterizeTriangle(
-        Vec3 p0, Vec3 p1, Vec3 p2,
-        Vec3 v0OverW, Vec3 v1OverW, Vec3 v2OverW,
-        Vec3 n0OverW, Vec3 n1OverW, Vec3 n2OverW,
-        float invW0, float invW1, float invW2
-    ){
-        drawTriangle(
-            p0.x, p0.y, p0.z, invW0,
-            p1.x, p1.y, p1.z, invW1,
-            p2.x, p2.y, p2.z, invW2,
-            v0OverW, v1OverW, v2OverW,
-            n0OverW, n1OverW, n2OverW
-        );
-    }
-
     private void drawTriangle(
-        float x0, float y0, float z0, float invW0,
-        float x1, float y1, float z1, float invW1,
-        float x2, float y2, float z2, float invW2,
-        Vec3 v0View, Vec3 v1View, Vec3 v2View,
-        Vec3 n0, Vec3 n1, Vec3 n2
+        Vertex v0, Vertex v1, Vertex v2, Vec3 normal0, Vec3 normal1, Vec3 normal2
     ) {
 
-        float minx = Math.max(0, Math.min(x0, Math.min(x1, x2)));
-        float maxx = Math.min(width - 1, Math.max(x0, Math.max(x1, x2)));
-        float miny = Math.max(0, Math.min(y0, Math.min(y1, y2)));
-        float maxy = Math.min(height - 1, Math.max(y0, Math.max(y1, y2)));
 
-        float area = edgeFunction(x0, y0, x1, y1, x2, y2);
+        float minx = Math.max(0, Math.min(v0.screenPos.x, Math.min(v1.screenPos.x, v2.screenPos.x)));
+        float maxx = Math.min(width - 1, Math.max(v0.screenPos.x, Math.max(v1.screenPos.x, v2.screenPos.x)));
+        float miny = Math.max(0, Math.min(v0.screenPos.y, Math.min(v1.screenPos.y, v2.screenPos.y)));
+        float maxy = Math.min(height - 1, Math.max(v0.screenPos.y, Math.max(v1.screenPos.y, v2.screenPos.y)));
+
+        float area = edgeFunction(v0.screenPos.x, v0.screenPos.y, v1.screenPos.x, v1.screenPos.y, v2.screenPos.x, v2.screenPos.y);
         if (area == 0) return;
 
         if (backfaceCullingEnabled && area < 0)
@@ -260,19 +195,17 @@ public class Renderer {
                 float px = x + 0.5f;
                 float py = y + 0.5f;
 
-                float w0 = edgeFunction(x1, y1, x2, y2, px, py);
-                float w1 = edgeFunction(x2, y2, x0, y0, px, py);
-                float w2 = edgeFunction(x0, y0, x1, y1, px, py);
+                float w0 = edgeFunction(v1.screenPos.x, v1.screenPos.y, v2.screenPos.x, v2.screenPos.y, px, py);
+                float w1 = edgeFunction(v2.screenPos.x, v2.screenPos.y, v0.screenPos.x, v0.screenPos.y, px, py);
+                float w2 = edgeFunction(v0.screenPos.x, v0.screenPos.y, v1.screenPos.x, v1.screenPos.y, px, py);
 
-                if ((w0 >= 0 && w1 >= 0 && w2 >= 0 && area > 0) ||
-                    (w0 <= 0 && w1 <= 0 && w2 <= 0 && area < 0)) {
+                if (w0 * area >= 0 && w1 * area >= 0 && w2 * area >= 0) {
 
                     float alpha = w0 / area;
                     float beta  = w1 / area;
                     float gamma = w2 / area;
 
-                    // float depth = alpha * z0 / w0 + beta * z1/w1 + gamma * z2/w2;
-                    float depth = alpha * z0 + beta * z1 + gamma * z2;
+                    float depth = alpha * v0.screenPos.z + beta * v1.screenPos.z + gamma * v2.screenPos.z;
 
                     int index = y * width + x;
 
@@ -284,22 +217,23 @@ public class Renderer {
 
                         // interpolate 1/w
                         float invW =
-                                alpha * invW0 +
-                                beta  * invW1 +
-                                gamma * invW2;
+                                alpha * v0.invW +
+                                beta  * v1.invW +
+                                gamma * v2.invW;
 
                         // interpolate attributes / w
                         Vec3 viewOverW =
-                                v0View.multiply(alpha)
-                                .add(v1View.multiply(beta))
-                                .add(v2View.multiply(gamma));
+                                v0.viewOverW.multiply(alpha)
+                                .add(v1.viewOverW.multiply(beta))
+                                .add(v2.viewOverW.multiply(gamma));
 
                         Vec3 normalOverW =
-                                n0.multiply(alpha)
-                                .add(n1.multiply(beta))
-                                .add(n2.multiply(gamma));
+                                normal0.multiply(alpha)
+                                .add(normal1.multiply(beta))
+                                .add(normal2.multiply(gamma));
 
                         // reconstruct correct values
+
                         float w = 1.0f / invW;
 
                         Vec3 viewPos = viewOverW.multiply(w);
