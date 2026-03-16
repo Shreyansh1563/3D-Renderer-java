@@ -3,7 +3,6 @@ import engine.Display;
 import engine.Engine;
 import graphics.Camera;
 import graphics.Renderer;
-import graphics.ShadingMode;
 import scene.GameObject;
 import scene.Mesh;
 import scene.Scene;
@@ -13,14 +12,16 @@ public class Main {
     public static void main(String[] args) {
         
         Mesh cube = Mesh.cubeMesh(8);
-        Mesh torus = Mesh.toruMesh(6, 2, 26, 12);
+        Mesh torus = Mesh.createTorus(32, 32, 6, 2);//Mesh.toruMesh(6, 2, 26, 12);
+        Mesh sphere = Mesh.createSphere(32, 32, 5);
 
         Transform transform = new Transform(new Vec3(-8, 0, -5), new Vec3(0, 0, 0), new Vec3(1, 1, 1));
-        Transform transform2 = new Transform(new Vec3(1, 0, -5), new Vec3(0, 0, 0), new Vec3(1, 1, 1));
+        Transform transform2 = new Transform(new Vec3(0, 0, -5), new Vec3(0, 0, 0), new Vec3(1, 1, 1));
         Transform transform3 = new Transform(new Vec3(6, 0, -5), new Vec3(0, 0, (float)Math.toRadians(90)), new Vec3(1, 1, 1));
 
         GameObject object1 = new GameObject(cube, transform);
         GameObject object3 = new GameObject(torus, transform3);
+        GameObject object2 = new GameObject(sphere, transform);
 
         
     // // float fov   = (float)Math.toRadians(70);
@@ -35,8 +36,8 @@ public class Main {
 
 
         Scene scene = new Scene(camera);
+        scene.addObject(object2);
         scene.addObject(object3);
-        scene.addObject(object1);
 
         Renderer renderer = new Renderer(500, 500);
         // renderer.setBackfaceCulling(false);

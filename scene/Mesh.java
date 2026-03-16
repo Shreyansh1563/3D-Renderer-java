@@ -2,13 +2,108 @@ package scene;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import Math.Vec2;
 import Math.Vec3;
 
 public class Mesh {
     public List<Vec3> vertices = new ArrayList<>();
     public List<Triangle> triangles = new ArrayList<>();
     public List<Vec3> normals = new ArrayList<>();
+    public List<Vec2> uvs = new ArrayList<>();
     // public List<Edge> edges = new ArrayList<>();
+
+    public static Mesh createSphere(int latSteps, int lonSteps, float radius) {
+
+        Mesh mesh = new Mesh();
+
+        for (int lat = 0; lat <= latSteps; lat++) {
+
+            float v = (float)lat / latSteps;
+            float theta = (float)(Math.PI * v);
+
+            for (int lon = 0; lon <= lonSteps; lon++) {
+
+                float u = (float)lon / lonSteps;
+                float phi = (float)(2 * Math.PI * u);
+
+                float x = (float)(Math.sin(theta) * Math.cos(phi));
+                float y = (float)Math.cos(theta);
+                float z = (float)(Math.sin(theta) * Math.sin(phi));
+
+                Vec3 pos = new Vec3(x * radius, y * radius, z * radius);
+
+                mesh.vertices.add(pos);
+                mesh.normals.add(new Vec3(x, y, z));
+                mesh.uvs.add(new Vec2(u, v));
+            }
+        }
+
+        for (int lat = 0; lat < latSteps; lat++) {
+            for (int lon = 0; lon < lonSteps; lon++) {
+
+                int i0 = lat * (lonSteps + 1) + lon;
+                int i1 = i0 + 1;
+                int i2 = i0 + lonSteps + 1;
+                int i3 = i2 + 1;
+
+                mesh.triangles.add(new Triangle(i0, i2, i1));
+                mesh.triangles.add(new Triangle(i1, i2, i3));
+            }
+        }
+
+        return mesh;
+    }
+
+    public static Mesh createTorus(int ringSteps, int tubeSteps, float R, float r) {
+
+        Mesh mesh = new Mesh();
+
+        for (int i = 0; i <= ringSteps; i++) {
+
+            float u = (float)i / ringSteps * (float)(2 * Math.PI);
+
+            for (int j = 0; j <= tubeSteps; j++) {
+
+                float v = (float)j / tubeSteps * (float)(2 * Math.PI);
+
+                float x = (float)((R + r * Math.cos(v)) * Math.cos(u));
+                float y = (float)((R + r * Math.cos(v)) * Math.sin(u));
+                float z = (float)(r * Math.sin(v));
+
+                Vec3 pos = new Vec3(x, y, z);
+
+                Vec3 normal = new Vec3(
+                        (float)(Math.cos(u) * Math.cos(v)),
+                        (float)(Math.sin(u) * Math.cos(v)),
+                        (float)Math.sin(v)
+                );
+
+                mesh.vertices.add(pos);
+                mesh.normals.add(normal.normalize());
+
+                float uu = (float)i / ringSteps;
+                float vv = (float)j / tubeSteps;
+
+                mesh.uvs.add(new Vec2(uu, vv));
+            }
+        }
+
+        for (int i = 0; i < ringSteps; i++) {
+            for (int j = 0; j < tubeSteps; j++) {
+
+                int a = i * (tubeSteps + 1) + j;
+                int b = a + 1;
+                int c = a + tubeSteps + 1;
+                int d = c + 1;
+
+                mesh.triangles.add(new Triangle(a, c, b));
+                mesh.triangles.add(new Triangle(b, c, d));
+            }
+        }
+
+        return mesh;
+    }
 
     public static Mesh cubeMesh(float size) {
 
@@ -45,46 +140,6 @@ public class Mesh {
 
             mesh.triangles.add(new Triangle(startIndex, startIndex+1, startIndex+2));
             mesh.triangles.add(new Triangle(startIndex, startIndex+2, startIndex+3));
-        }
-
-        return mesh;
-    }
-
-    public static Mesh sphereMesh(float radius, int stacks, int slices) {
-        Mesh mesh = new Mesh();
-
-        // ----- Vertices -----
-        for (int i = 0; i <= stacks; i++) {
-            float v = (float) i / stacks;          // 0 → 1
-            float phi = (float) (Math.PI * v);     // 0 → PI
-
-            for (int j = 0; j <= slices; j++) {
-                float u = (float) j / slices;      // 0 → 1
-                float theta = (float) (2.0 * Math.PI * u); // 0 → 2PI
-
-                float x = (float) (Math.sin(phi) * Math.cos(theta));
-                float y = (float) Math.cos(phi);
-                float z = (float) (Math.sin(phi) * Math.sin(theta));
-
-                mesh.vertices.add(new Vec3(
-                        radius * x,
-                        radius * y,
-                        radius * z
-                ));
-            }
-        }
-
-        // ----- Triangles -----
-        for (int i = 0; i < stacks; i++) {
-            for (int j = 0; j < slices; j++) {
-
-                int first = i * (slices + 1) + j;
-                int second = first + slices + 1;
-
-                // CCW winding (outside facing)
-                mesh.triangles.add(new Triangle(first, second, first + 1));
-                mesh.triangles.add(new Triangle(second, second + 1, first + 1));
-            }
         }
 
         return mesh;

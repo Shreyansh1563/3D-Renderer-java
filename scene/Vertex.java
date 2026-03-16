@@ -1,7 +1,7 @@
 package scene;
 
+import Math.Vec2;
 import Math.Vec3;
-import Math.Vec4;
 
 public class Vertex {
 
@@ -10,4 +10,6 @@ public class Vertex {
     public Vec3 viewOverW;     // for perspective correction
     public Vec3 normalOverW;   // perspective corrected normal
     public float invW;
+    public Vec2 uv;
+    public Vec2 uvOverW;
 }

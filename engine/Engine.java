@@ -98,7 +98,7 @@ public class Engine implements Runnable{
         var lis = scene.getObjects();
         lis.get(0).transform.rotation.x += 0.01f;
         lis.get(1).transform.rotation.y -= 0.01f;
-        // camera.position.z += .01f;
+        // camera.position.z -= .05f;
         // camera.rotation.y += 0.01f;
     }
 }

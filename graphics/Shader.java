@@ -11,6 +11,9 @@ public class Shader {
     private float ambient = 0.2f;
     private float specularStrength = 0.5f;
     private int shininess = 32;
+    // private Texture texture = new Texture(512, 512);
+    // private Texture texture = new Texture("assets/textures/stones.jpg");
+    private Texture texture = new Texture("assets/textures/bricks.jpg");
 
     public int shadeFragment(FragmentData data) {
 
@@ -44,9 +47,10 @@ public class Shader {
         brightness = Math.min(brightness, 1.0f);
 
         // Base object color
-        int baseR = 200;
-        int baseG = 200;
-        int baseB = 200;
+        int baseColor = texture.sample(data.uv.x, data.uv.y);
+        int baseR = (baseColor >> 16) & 255;// 200;
+        int baseG = (baseColor >> 8) & 255;// 200;
+        int baseB =  baseColor & 255;//200;
 
         // Apply brightness
         int r = Math.min(255, (int)(baseR * brightness));
